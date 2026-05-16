@@ -1,0 +1,13 @@
+{
+    "allowed_folders": [
+        "./test_watch",
+        "./screenshots"
+    ],
+    "allowed_apps": [
+        "calc",
+        "notepad",
+        "cmd",
+        "explorer"
+    ],
+    "allow_all_commands": false
+}

@@ -3,9 +3,12 @@ import json
 from datetime import datetime
 import os
 
+from .vector_memory import VectorMemory
+
 class MemorySystem:
-    def __init__(self, db_path="mello_memory.db"):
+    def __init__(self, db_path="mello_memory.db", vector_db_path="mello_vector_db"):
         self.db_path = db_path
+        self.vector_db = VectorMemory(vector_db_path)
         self._init_db()
 
     def _init_db(self):
@@ -38,7 +41,20 @@ class MemorySystem:
                 "INSERT INTO episodic_memory (event_type, description, metadata) VALUES (?, ?, ?)",
                 (event_type, description, json.dumps(metadata) if metadata else None)
             )
+            row_id = cursor.lastrowid
             conn.commit()
+            
+            # Sync to Vector DB for semantic search
+            self.vector_db.add_event(
+                event_id=row_id,
+                text=description,
+                metadata={"type": event_type, "meta": json.dumps(metadata) if metadata else ""}
+            )
+            return row_id
+
+    def semantic_search(self, query, limit=5):
+        """Returns relevant events using vector search"""
+        return self.vector_db.search(query, n_results=limit)
 
     def update_semantic_memory(self, key, value):
         with sqlite3.connect(self.db_path) as conn:

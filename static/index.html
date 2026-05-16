@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mello Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <h1>MELLO</h1>
+                <span class="status-badge">Online</span>
+            </div>
+            <nav>
+                <ul>
+                    <li class="active" data-tab="chat">Chat</li>
+                    <li data-tab="apps">Apps</li>
+                    <li data-tab="models">Models</li>
+                    <li data-tab="skills">Skills</li>
+                    <li data-tab="reports">Reports</li>
+                    <li data-tab="logs">Logs</li>
+                    <li data-tab="security">Security</li>
+                </ul>
+            </nav>
+            <div class="sidebar-footer">
+                <p>Phase 5 - Advanced AI</p>
+                <button id="shutdown-btn" class="shutdown-btn">Power Down</button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Chat Tab -->
+            <section id="chat-tab" class="tab-content active">
+                <div class="chat-header">
+                    <h2>Intelligence Layer</h2>
+                    <div id="active-model-display">Model: qwen3.5:4b</div>
+                </div>
+                <div id="chat-history" class="chat-history">
+                    <div class="message assistant">
+                        Hi! I'm Mello. How can I help you with your desktop today?
+                    </div>
+                </div>
+                <div class="chat-input-area">
+                    <button id="mic-btn" class="icon-btn">🎤</button>
+                    <input type="text" id="user-input" placeholder="Type a message or use the mic...">
+                    <button id="send-btn">Send</button>
+                </div>
+            </section>
+
+            <!-- Apps Tab -->
+            <section id="apps-tab" class="tab-content">
+                <h2>Installed Applications</h2>
+                <div id="apps-list" class="grid-container"></div>
+            </section>
+
+            <!-- Models Tab -->
+            <section id="models-tab" class="tab-content">
+                <div class="header-with-action">
+                    <h2>Ollama Models</h2>
+                    <div class="inline-form">
+                        <input type="text" id="pull-model-input" placeholder="model_name (e.g. llama3)">
+                        <button id="pull-model-btn">Pull Model</button>
+                    </div>
+                </div>
+                <div id="models-list" class="grid-container"></div>
+            </section>
+
+            <!-- Skills Tab -->
+            <section id="skills-tab" class="tab-content">
+                <div class="header-with-action">
+                    <h2>Modular Skills</h2>
+                    <button id="open-skill-builder" class="accent-btn">+ Create New Skill</button>
+                </div>
+                
+                <!-- Skill Builder Workflow UI (Hidden by default) -->
+                <div id="skill-builder" class="skill-builder-card" style="display:none;">
+                    <div class="workflow-steps">
+                        <div class="step active" data-step="1">1. Concept</div>
+                        <div class="step" data-step="2">2. Logic</div>
+                        <div class="step" data-step="3">3. Review</div>
+                    </div>
+                    <div id="step-content">
+                        <!-- Step 1: Concept -->
+                        <div class="workflow-content active" id="step-1">
+                            <h3>What should this skill do?</h3>
+                            <input type="text" id="skill-name-input" placeholder="e.g. MediaConverter">
+                            <textarea id="skill-desc-input" placeholder="Describe the skill's purpose..."></textarea>
+                            <div class="btn-group">
+                                <button class="next-btn" onclick="nextStep(2)">Next: Logic →</button>
+                            </div>
+                        </div>
+                        <!-- Step 2: Logic -->
+                        <div class="workflow-content" id="step-2">
+                            <h3>Define the Action</h3>
+                            <select id="skill-type-input">
+                                <option value="shell">Shell Command (PowerShell/Bash)</option>
+                                <option value="python">Python Script (Advanced)</option>
+                                <option value="ai">AI Agent Workflow</option>
+                            </select>
+                            <textarea id="skill-logic-input" placeholder="Enter the command or code template..."></textarea>
+                            <div class="btn-group">
+                                <button class="back-btn" onclick="nextStep(1)">← Back</button>
+                                <button class="next-btn" onclick="nextStep(3)">Next: Review →</button>
+                            </div>
+                        </div>
+                        <!-- Step 3: Review -->
+                        <div class="workflow-content" id="step-3">
+                            <h3>Ready to register?</h3>
+                            <div id="skill-review-summary" class="review-box"></div>
+                            <div class="btn-group">
+                                <button class="back-btn" onclick="nextStep(2)">← Back</button>
+                                <button id="final-create-skill-btn">Install Skill 🚀</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="skills-list" class="grid-container"></div>
+            </section>
+
+            <!-- Reports Tab -->
+            <section id="reports-tab" class="tab-content">
+                <h2>File Reports</h2>
+                <div id="reports-list" class="list-container"></div>
+            </section>
+
+            <!-- Logs Tab -->
+            <section id="logs-tab" class="tab-content">
+                <h2>Episodic Memory Logs</h2>
+                <div id="logs-list" class="log-container"></div>
+            </section>
+
+            <!-- Security Tab -->
+            <section id="security-tab" class="tab-content">
+                <h2>Security Policy</h2>
+                <div id="security-display" class="list-container"></div>
+            </section>
+        </main>
+    </div>
+    <script src="/static/app.js"></script>
+</body>
+</html>

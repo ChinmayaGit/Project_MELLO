@@ -21,25 +21,45 @@ class MelloChat:
             """}
         ]
 
-    def get_context(self):
-        recent_events = self.memory.query_episodic_memory(limit=5)
-        if not recent_events:
-            return "No recent file activity."
-        
-        context_str = "Recent Desktop Activity:\n"
+    def get_context(self, user_query=None):
+        # 1. Get recent context (Short-term memory)
+        recent_events = self.memory.query_episodic_memory(limit=3)
+        context_str = "Recent Events:\n"
         for event in recent_events:
             context_str += f"- {event[3]}\n"
+        
+        # 2. Get semantically relevant context (Long-term/Semantic retrieval)
+        if user_query:
+            semantic_results = self.memory.semantic_search(user_query, limit=3)
+            if semantic_results and semantic_results['documents']:
+                context_str += "\nRelevant Past Memories:\n"
+                for doc in semantic_results['documents'][0]:
+                    if doc not in context_str: # Avoid duplication
+                        context_str += f"- {doc}\n"
+        
         return context_str
 
     def chat_stream(self, user_input):
-        # Only add context if it's the first message or if it changed significantly
-        context = self.get_context()
+        # Refresh the system prompt every time to ensure the skill manifest is up to date
+        self.messages[0]["content"] = f"""
+            You are Mello, a local-first AI assistant. 
+            {"Respond directly and concisely. Do NOT show <think> tags." if not self.think_enabled else ""}
+            
+            {self.skill_manager.get_skill_manifest()}
+            
+            GUIDELINES:
+            1. Use 'mkdir' skill for creating folders (don't use run_command).
+            2. For 'screenshot', do not provide a path parameter, just {{ "action": "screenshot" }}.
+            3. Always confirm actions to the user.
+            
+            To use a skill, include a JSON block:
+            {{ "action": "skill_name", "param": "..." }}
+        """
         
-        # We'll use a simplified message structure closer to 'ollama run'
-        user_message = {"role": "user", "content": user_input}
-        if len(self.messages) == 1: # Only system prompt exists
-            user_message["content"] = f"Context: {context}\n\nUser: {user_input}"
+        # Perform semantic retrieval based on the input
+        context = self.get_context(user_input)
         
+        user_message = {"role": "user", "content": f"Context: {context}\n\nUser: {user_input}"}
         self.messages.append(user_message)
         
         # Limit history to last 5 turns for max speed
