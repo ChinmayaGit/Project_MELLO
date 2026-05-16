@@ -1,0 +1,12 @@
+watchdog
+ollama
+fastapi
+uvicorn
+pydantic
+python-dotenv
+networkx
+chromadb
+lancedb
+pyautogui
+playwright
+ffmpeg-python
