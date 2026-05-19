@@ -1,6 +1,13 @@
 import os
+import logging
 import uvicorn
 from dotenv import load_dotenv
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(message)s",
+    datefmt="%H:%M:%S",
+)
 from src.memory import MemorySystem
 from src.classifier import Classifier
 from src.events import start_watching
@@ -28,7 +35,7 @@ def main():
     print("\n--- Initializing Mello Web Dashboard ---")
     memory = MemorySystem(db_path)
     classifier = Classifier(model=classifier_model)
-    mello_chat = MelloChat(memory, model=main_model, think_enabled=think_enabled)
+    mello_chat = MelloChat(memory, model=main_model, think_enabled=think_enabled, watch_path=watch_path)
     skill_manager = SkillManager()
     
     # Start the event watcher (Non-blocking)

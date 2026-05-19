@@ -283,28 +283,84 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadApps() {
         const container = document.getElementById('apps-list');
         if (!container) return;
-        container.innerHTML = 'Scanning for applications...';
-        const res = await fetch('/api/apps/installed');
-        const data = await res.json();
+        container.innerHTML = '<p style="color:var(--text-muted)">Scanning for applications...</p>';
+
+        const [appsRes, secRes] = await Promise.all([
+            fetch('/api/apps/installed'),
+            fetch('/api/security')
+        ]);
+        const appsData = await appsRes.json();
+        const secData = await secRes.json();
+
+        const allowedSet = new Set(
+            (secData.policy?.allowed_apps || []).map(a => a.toLowerCase())
+        );
+
         container.innerHTML = '';
-        if (data.apps) {
-            data.apps.forEach(app => {
-                const card = document.createElement('div');
-                card.className = 'app-card';
-                card.innerHTML = `
-                    <div class="app-icon">🚀</div>
-                    <div class="app-name">${app.Name}</div>
-                `;
-                card.addEventListener('click', () => {
-                    // Logic to launch app via Mello chat
-                    userInput.value = `Launch ${app.Name}`;
-                    sendMessage();
-                    // Switch back to chat tab to see the interaction
-                    document.querySelector('li[data-tab="chat"]').click();
-                });
-                container.appendChild(card);
-            });
+        if (!appsData.apps || !appsData.apps.length) {
+            container.innerHTML = '<p style="color:var(--text-muted)">No applications found.</p>';
+            return;
         }
+
+        const apps = [...appsData.apps].sort((a, b) => a.Name.localeCompare(b.Name));
+        const allowed = apps.filter(a => allowedSet.has(a.Name.toLowerCase()));
+        const blocked = apps.filter(a => !allowedSet.has(a.Name.toLowerCase()));
+
+        function makeSection(title, color, appList) {
+            if (!appList.length) return;
+            const section = document.createElement('div');
+            section.style.marginBottom = '1.5rem';
+            section.innerHTML = `<h3 style="color:${color}; margin-bottom:0.75rem; font-size:0.85rem; text-transform:uppercase; letter-spacing:1px;">${title} (${appList.length})</h3>`;
+
+            const grid = document.createElement('div');
+            grid.className = 'grid-container';
+            grid.style.marginTop = '0';
+
+            appList.forEach(app => {
+                const isAllowed = allowedSet.has(app.Name.toLowerCase());
+                const card = document.createElement('div');
+                card.className = 'app-permission-card';
+                card.innerHTML = `
+                    <div class="app-permission-info">
+                        <span class="app-permission-name" title="${app.Name}">${app.Name}</span>
+                        <span class="app-permission-badge ${isAllowed ? 'badge-allowed' : 'badge-blocked'}">${isAllowed ? 'Allowed' : 'Blocked'}</span>
+                    </div>
+                    <div class="app-permission-actions">
+                        ${isAllowed ? `<button class="launch-btn" data-app="${app.Name}">Launch</button>` : ''}
+                        <label class="switch">
+                            <input type="checkbox" ${isAllowed ? 'checked' : ''}>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                `;
+
+                card.querySelector('input[type="checkbox"]').addEventListener('change', async (e) => {
+                    await fetch('/api/security/apps/toggle', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: app.Name, allowed: e.target.checked })
+                    });
+                    loadApps();
+                });
+
+                const launchBtn = card.querySelector('.launch-btn');
+                if (launchBtn) {
+                    launchBtn.addEventListener('click', () => {
+                        userInput.value = `Open ${app.Name}`;
+                        sendMessage();
+                        document.querySelector('li[data-tab="chat"]').click();
+                    });
+                }
+
+                grid.appendChild(card);
+            });
+
+            section.appendChild(grid);
+            container.appendChild(section);
+        }
+
+        makeSection('✅ Allowed', '#34d399', allowed);
+        makeSection('🚫 Not Allowed', '#f87171', blocked);
     }
 
     async function loadSecurity() {

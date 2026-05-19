@@ -1,5 +1,6 @@
 {
     "allowed_folders": [
+        "C:\\Users\\chinu",
         "./test_watch",
         "./screenshots"
     ],
@@ -7,7 +8,9 @@
         "calc",
         "notepad",
         "cmd",
-        "explorer"
+        "explorer",
+        "chrome",
+        "msedge"
     ],
     "allow_all_commands": false
 }

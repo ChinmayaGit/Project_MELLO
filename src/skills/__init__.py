@@ -23,10 +23,18 @@ class FileSystemSkill(BaseSkill):
         if not self.enabled: return super().execute(params)
         action = params.get("action")
         path = params.get("path")
-        
+
         if action == "mkdir":
             os.makedirs(path, exist_ok=True)
             return f"Created folder: {path}"
+        elif action == "create_file":
+            parent = os.path.dirname(path)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            content = params.get("content", "")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+            return f"Created file: {path}"
         elif action == "move":
             src = params.get("source")
             dst = params.get("destination")
@@ -145,6 +153,7 @@ class SkillManager:
         self.security = SecurityLayer()
         self.skills = {
             "mkdir": FileSystemSkill(),
+            "create_file": FileSystemSkill(),
             "move": FileSystemSkill(),
             "read_file": FileReadSkill(),
             "open_app": AppAutomationSkill(),
@@ -163,8 +172,9 @@ class SkillManager:
         manifest = "Available Skills:\n"
         for name, skill in self.skills.items():
             if skill.enabled:
-                if name == "mkdir": manifest += "- mkdir: Create a folder. Params: { 'path': 'string' }\n"
-                elif name == "move": manifest += "- move: Move a file. Params: { 'source': 'string', 'destination': 'string' }\n"
+                if name == "mkdir": manifest += '- mkdir: Create a folder. Params: { "action": "mkdir", "path": "string" }\n'
+                elif name == "create_file": manifest += '- create_file: Create a file with optional content. Params: { "action": "create_file", "path": "string", "content": "string" }\n'
+                elif name == "move": manifest += '- move: Move a file. Params: { "action": "move", "source": "string", "destination": "string" }\n'
                 elif name == "read_file": manifest += "- read_file: Read file content. Params: { 'path': 'string' }\n"
                 elif name == "open_app": manifest += "- open_app: Open an application. Params: { 'app_name': 'string' }\n"
                 elif name == "run_command": manifest += "- run_command: Run a shell command. Params: { 'command': 'string' }\n"

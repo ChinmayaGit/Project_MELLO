@@ -397,3 +397,68 @@ input:checked + .slider:before {
     font-size: 2rem;
     margin-bottom: 0.5rem;
 }
+
+/* App permission cards */
+.app-permission-card {
+    background: var(--bg-card);
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    transition: 0.2s;
+}
+
+.app-permission-card:hover {
+    border-color: var(--border);
+}
+
+.app-permission-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.app-permission-name {
+    font-size: 0.85rem;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 160px;
+}
+
+.app-permission-badge {
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 10px;
+    width: fit-content;
+}
+
+.badge-allowed { background: #065f46; color: #34d399; }
+.badge-blocked { background: #450a0a; color: #f87171; }
+
+.app-permission-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.launch-btn {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 0.25rem 0.6rem;
+    font-size: 0.75rem;
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+.launch-btn:hover {
+    background: var(--accent);
+    color: black;
+}

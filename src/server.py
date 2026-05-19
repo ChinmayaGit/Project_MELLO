@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import json
 import asyncio
+import threading
 import os
 import ollama
 import subprocess
@@ -30,13 +31,28 @@ async def read_index():
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
     async def event_generator():
-        try:
-            for chunk in mello_chat.chat_stream(request.message):
-                # Standard SSE format: data: <content>\n\n
-                yield f"data: {json.dumps({'text': chunk})}\n\n"
-                await asyncio.sleep(0.01) # Yield to event loop
-        except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue = asyncio.Queue()
+
+        def producer():
+            try:
+                for chunk in mello_chat.chat_stream(request.message):
+                    loop.call_soon_threadsafe(queue.put_nowait, chunk)
+            except Exception as e:
+                loop.call_soon_threadsafe(queue.put_nowait, RuntimeError(str(e)))
+            finally:
+                loop.call_soon_threadsafe(queue.put_nowait, None)
+
+        threading.Thread(target=producer, daemon=True).start()
+
+        while True:
+            item = await queue.get()
+            if item is None:
+                break
+            if isinstance(item, RuntimeError):
+                yield f"data: {json.dumps({'error': str(item)})}\n\n"
+                break
+            yield f"data: {json.dumps({'text': item})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -59,6 +75,18 @@ async def get_skills():
         for name, skill in skill_manager.skills.items()
     ]
     return {"skills": skills_data, "manifest": skill_manager.get_skill_manifest()}
+
+class AppPermissionRequest(BaseModel):
+    name: str
+    allowed: bool
+
+@app.post("/api/security/apps/toggle")
+async def toggle_app_permission(request: AppPermissionRequest):
+    if request.allowed:
+        skill_manager.security.allow_app(request.name)
+    else:
+        skill_manager.security.deny_app(request.name)
+    return {"status": "success"}
 
 class SkillToggleRequest(BaseModel):
     name: str
