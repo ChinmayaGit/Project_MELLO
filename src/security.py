@@ -8,7 +8,12 @@ class SecurityLayer:
 
     def _load_policy(self):
         if os.path.exists(self.policy_path):
-            return json.load(open(self.policy_path, 'r'))
+            policy = json.load(open(self.policy_path, 'r'))
+            # Back-fill restricted_keywords for existing policy files
+            if "restricted_keywords" not in policy:
+                policy["restricted_keywords"] = ["rm", "del", "format", "shutdown", "wget", "curl"]
+                self._save_policy(policy)
+            return policy
         default_policy = {
             "allowed_folders": [
                 os.path.expanduser("~"),
@@ -16,6 +21,7 @@ class SecurityLayer:
                 "./screenshots",
             ],
             "allowed_apps": ["calc", "notepad", "cmd", "explorer", "chrome", "msedge"],
+            "restricted_keywords": ["rm", "del", "format", "shutdown", "wget", "curl"],
             "allow_all_commands": False
         }
         self._save_policy(default_policy)
@@ -50,12 +56,33 @@ class SecurityLayer:
         ]
         self._save_policy(self.policy)
 
+    def add_folder(self, path):
+        folders = self.policy.get("allowed_folders", [])
+        if path not in folders:
+            folders.append(path)
+            self.policy["allowed_folders"] = folders
+            self._save_policy(self.policy)
+
+    def remove_folder(self, path):
+        self.policy["allowed_folders"] = [f for f in self.policy.get("allowed_folders", []) if f != path]
+        self._save_policy(self.policy)
+
+    def add_keyword(self, keyword):
+        keywords = self.policy.get("restricted_keywords", [])
+        if keyword not in keywords:
+            keywords.append(keyword)
+            self.policy["restricted_keywords"] = keywords
+            self._save_policy(self.policy)
+
+    def remove_keyword(self, keyword):
+        self.policy["restricted_keywords"] = [k for k in self.policy.get("restricted_keywords", []) if k != keyword]
+        self._save_policy(self.policy)
+
     def is_command_allowed(self, command):
         if self.policy.get("allow_all_commands", False):
             return True
-        # Very basic check: only allow commands that don't look dangerous
-        dangerous_keywords = ["rm ", "del ", "format ", "shutdown", "wget", "curl"]
-        for kw in dangerous_keywords:
-            if kw in command.lower():
+        keywords = self.policy.get("restricted_keywords", ["rm", "del", "format", "shutdown", "wget", "curl"])
+        for kw in keywords:
+            if kw.lower() in command.lower():
                 return False
         return True

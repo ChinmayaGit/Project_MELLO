@@ -80,12 +80,38 @@ class AppPermissionRequest(BaseModel):
     name: str
     allowed: bool
 
+class SecurityFolderRequest(BaseModel):
+    path: str
+
+class SecurityKeywordRequest(BaseModel):
+    keyword: str
+
 @app.post("/api/security/apps/toggle")
 async def toggle_app_permission(request: AppPermissionRequest):
     if request.allowed:
         skill_manager.security.allow_app(request.name)
     else:
         skill_manager.security.deny_app(request.name)
+    return {"status": "success"}
+
+@app.post("/api/security/folders/add")
+async def add_folder(request: SecurityFolderRequest):
+    skill_manager.security.add_folder(request.path)
+    return {"status": "success"}
+
+@app.post("/api/security/folders/remove")
+async def remove_folder(request: SecurityFolderRequest):
+    skill_manager.security.remove_folder(request.path)
+    return {"status": "success"}
+
+@app.post("/api/security/keywords/add")
+async def add_keyword(request: SecurityKeywordRequest):
+    skill_manager.security.add_keyword(request.keyword)
+    return {"status": "success"}
+
+@app.post("/api/security/keywords/remove")
+async def remove_keyword(request: SecurityKeywordRequest):
+    skill_manager.security.remove_keyword(request.keyword)
     return {"status": "success"}
 
 class SkillToggleRequest(BaseModel):
@@ -154,11 +180,53 @@ class ModelPullRequest(BaseModel):
 @app.post("/api/models/pull")
 async def pull_model(request: ModelPullRequest):
     try:
-        # In a real app, this should be async/background
         ollama.pull(request.name)
         return {"status": "success", "message": f"Started pulling {request.name}"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+@app.get("/api/models/status")
+async def get_model_status():
+    """Return the active model name and whether it is currently loaded in Ollama memory."""
+    active = mello_chat.model if mello_chat else "qwen3.5:4b"
+    try:
+        ps_result = ollama.ps()
+        if hasattr(ps_result, 'models'):
+            running = [m.model for m in ps_result.models]
+        elif isinstance(ps_result, dict):
+            running = [m.get('model', '') for m in ps_result.get('models', [])]
+        else:
+            running = []
+        # Match on base name (ignore tag differences like :latest vs :4b)
+        def base(name): return name.split(':')[0].lower()
+        is_live = any(base(active) == base(r) for r in running)
+    except Exception:
+        is_live = False
+        running = []
+    return {"active_model": active, "is_live": is_live, "running": running}
+
+@app.post("/api/models/start")
+async def start_model(request: ModelPullRequest):
+    """Warm up (load into memory) a model. Updates the active chat model too."""
+    name = request.name or (mello_chat.model if mello_chat else "qwen3.5:4b")
+    if mello_chat:
+        mello_chat.model = name
+
+    def _warmup():
+        try:
+            ollama.generate(model=name, prompt='hi', keep_alive='30m')
+        except Exception as e:
+            print(f"[Model Warmup] {e}")
+
+    threading.Thread(target=_warmup, daemon=True).start()
+    return {"status": "starting", "model": name}
+
+@app.post("/api/models/select")
+async def select_model(request: ModelPullRequest):
+    """Switch which model Mello uses for chat, without loading it."""
+    if mello_chat:
+        mello_chat.model = request.name
+    return {"status": "success", "model": request.name}
 
 class SkillCreateRequest(BaseModel):
     name: str

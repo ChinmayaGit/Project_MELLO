@@ -10,7 +10,8 @@
         "cmd",
         "explorer",
         "chrome",
-        "msedge"
+        "msedge",
+        "Cursor"
     ],
     "allow_all_commands": false
 }
