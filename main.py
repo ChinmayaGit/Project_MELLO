@@ -37,9 +37,11 @@ def main():
     classifier = Classifier(model=classifier_model)
     mello_chat = MelloChat(memory, model=main_model, think_enabled=think_enabled, watch_path=watch_path)
     skill_manager = SkillManager()
-    
-    # Start the event watcher (Non-blocking)
-    observer = start_watching(watch_path, memory, classifier)
+    mem_enabled   = skill_manager.security.policy.get("memory_enabled", True)
+
+    # Start the event watcher — skip initial scan if memory is disabled
+    observer = start_watching(watch_path, memory, classifier,
+                              scan_on_start=mem_enabled)
     
     # Initialize Web Server with core instances
     init_server(memory, mello_chat, skill_manager, watch_path)

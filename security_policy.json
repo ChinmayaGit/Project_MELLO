@@ -1,8 +1,9 @@
 {
     "allowed_folders": [
-        "C:\\Users\\chinu",
         "./test_watch",
-        "./screenshots"
+        "./screenshots",
+        "C:/Users/chinu/OneDrive/Desktop/mello/test_watch/Music",
+        "E:/Videos/0Movies/Best"
     ],
     "allowed_apps": [
         "calc",
@@ -13,5 +14,13 @@
         "msedge",
         "Cursor"
     ],
-    "allow_all_commands": false
+    "allow_all_commands": false,
+    "restricted_keywords": [
+        "rm",
+        "del",
+        "format",
+        "shutdown",
+        "wget",
+        "curl"
+    ]
 }

@@ -203,9 +203,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const text = userInput.value.trim();
         if (!text) return;
 
-        // Cancel any speech from previous message
-        if (window.speechSynthesis) window.speechSynthesis.cancel();
-
         appendMessage('user', text);
         userInput.value = '';
         sendBtn.disabled = true;
@@ -214,89 +211,6 @@ document.addEventListener('DOMContentLoaded', () => {
         setBotState('thinking');
 
         let assistantBubble = null;
-        let msgWrapper      = null;
-
-        // ── Streaming TTS pipeline ────────────────────────
-        // Text arrives in small chunks. We accumulate into ttsBuffer,
-        // split on sentence endings, and speak each sentence immediately.
-        let ttsBuffer   = '';   // raw text not yet sent to TTS
-        let ttsQueue    = [];   // complete sentences waiting to be spoken
-        let ttsSpeaking = false;
-        let streamDone  = false;
-
-        function buildUtt(phrase) {
-            const s   = getSettings();
-            const utt = new SpeechSynthesisUtterance(phrase);
-            utt.rate   = s.ttsRate   || 1.05;
-            utt.pitch  = s.ttsPitch  || 1.0;
-            utt.volume = s.ttsVolume !== undefined ? s.ttsVolume : 1.0;
-            const voices = window.speechSynthesis.getVoices();
-            if (s.ttsVoice) {
-                const found = voices.find(v => v.name === s.ttsVoice);
-                if (found) utt.voice = found;
-            } else {
-                const preferred = voices.find(v =>
-                    v.lang.startsWith('en') &&
-                    (v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Neural'))
-                ) || voices.find(v => v.lang.startsWith('en'));
-                if (preferred) utt.voice = preferred;
-            }
-            return utt;
-        }
-
-        function speakNext() {
-            if (!speechEnabled || !window.speechSynthesis || ttsSpeaking || !ttsQueue.length) return;
-            const phrase = ttsQueue.shift();
-            if (!phrase) { speakNext(); return; }
-            const utt = buildUtt(phrase);
-            ttsSpeaking = true;
-            setBotState('speaking');
-            setSpeakIndicator(true);
-            if (msgWrapper) msgWrapper.classList.add('speaking');
-            utt.onend = utt.onerror = () => {
-                ttsSpeaking = false;
-                if (ttsQueue.length) {
-                    speakNext();                        // chain next sentence
-                } else if (streamDone) {
-                    setSpeakIndicator(false);           // all done
-                    setBotState('idle');
-                    if (msgWrapper) msgWrapper.classList.remove('speaking');
-                }
-                // else: more text still streaming — stay in speaking state
-            };
-            window.speechSynthesis.speak(utt);
-        }
-
-        // Drain ttsBuffer: extract complete sentences and queue them.
-        // force=true flushes whatever is left (end of stream).
-        function pumpBuffer(force) {
-            if (!speechEnabled) return;
-            // Sentence boundary: .  !  ?  followed by whitespace or end-of-string
-            const re = /^([\s\S]*?[.!?]+)(\s|$)/;
-            for (;;) {
-                const m = re.exec(ttsBuffer);
-                if (m) {
-                    const phrase = cleanForSpeech(m[1].trim());
-                    ttsBuffer = ttsBuffer.slice(m[0].length);
-                    if (phrase) { ttsQueue.push(phrase); speakNext(); }
-                } else if (force && ttsBuffer.trim()) {
-                    // Flush the trailing fragment at end of stream
-                    const phrase = cleanForSpeech(ttsBuffer.trim());
-                    ttsBuffer = '';
-                    if (phrase) { ttsQueue.push(phrase); speakNext(); }
-                    break;
-                } else if (!force && ttsBuffer.length > 180) {
-                    // Safety valve for very long clauses — break at last comma/colon
-                    const at = Math.max(ttsBuffer.lastIndexOf(', ', 160), ttsBuffer.lastIndexOf(': ', 160));
-                    if (at > 40) {
-                        const phrase = cleanForSpeech(ttsBuffer.slice(0, at).trim());
-                        ttsBuffer = ttsBuffer.slice(at + 2);
-                        if (phrase) { ttsQueue.push(phrase); speakNext(); }
-                    } else break;
-                } else break;
-            }
-        }
-        // ─────────────────────────────────────────────────
 
         try {
             const response = await fetch('/api/chat', {
@@ -319,35 +233,25 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (data.text) {
                                 if (!assistantBubble) {
                                     hideTyping();
-                                    // Show speaking state visually even before TTS starts
                                     setBotState('speaking');
                                     assistantBubble = appendMessage('assistant', '');
-                                    msgWrapper = assistantBubble.closest('.message');
                                 }
                                 assistantBubble.innerText += data.text;
                                 chatHistory.scrollTop = chatHistory.scrollHeight;
-
-                                // Feed into streaming TTS — speaks sentence-by-sentence
-                                ttsBuffer += data.text;
-                                pumpBuffer(false);
                             }
                         } catch { /* skip malformed SSE */ }
                     }
                 }
             }
 
-            streamDone = true;
-
             if (!assistantBubble) {
                 hideTyping();
                 appendMessage('assistant', 'No response received.');
                 setBotState('idle');
             } else {
-                pumpBuffer(true);   // flush any trailing text
-                if (!speechEnabled || (!ttsSpeaking && !ttsQueue.length)) {
-                    setBotState('idle');
-                }
-                // If TTS is active, utt.onend chain will set idle when finished
+                speakText(assistantBubble.innerText, assistantBubble);
+                // If TTS not enabled, go idle right away
+                if (!speechEnabled) setBotState('idle');
             }
         } catch (error) {
             hideTyping();
@@ -564,266 +468,77 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ── Skills ────────────────────────────────────────────
-    const SKILL_CATEGORIES = {
-        file_system: { label: 'File System',  icon: '📁', accent: 'var(--accent)',   desc: 'Read, write, sort and organise files & folders' },
-        automation:  { label: 'Automation',   icon: '🖥️', accent: '#a78bfa',         desc: 'Launch apps and run shell commands' },
-        vision:      { label: 'Vision',       icon: '👁️', accent: '#34d399',         desc: 'Screen capture and visual awareness' },
-        web:         { label: 'Web',          icon: '🌐', accent: '#fbbf24',         desc: 'Search the internet for information' },
-        media:       { label: 'Media',        icon: '🎬', accent: '#f472b6',         desc: 'Movie posters, thumbnails and media metadata' },
-        other:       { label: 'Other',        icon: '⚙️', accent: 'var(--text-muted)', desc: 'Additional modular skills' },
-    };
-
-    const SKILL_META = {
-        mkdir:        { icon: '📁', label: 'Create Folder' },
-        create_file:  { icon: '📝', label: 'Create File'   },
-        move:         { icon: '↔️', label: 'Move File'     },
-        read_file:    { icon: '📖', label: 'Read File'     },
-        sort:                 { icon: '🗂️', label: 'Sort Files'           },
-        thumbnail_downloader: { icon: '🎬', label: 'Thumbnail Downloader' },
-        open_app:             { icon: '🚀', label: 'Open App'             },
-        run_command:  { icon: '⌨️', label: 'Run Command'   },
-        screenshot:   { icon: '📸', label: 'Screenshot'    },
-        web_search:   { icon: '🔍', label: 'Web Search'    },
-    };
-
     async function loadSkills() {
         const container = document.getElementById('skills-list');
-        container.innerHTML = '<p style="color:var(--text-muted);">Loading skills…</p>';
-        const res  = await fetch('/api/skills');
+        container.innerHTML = '<p style="color:var(--text-muted); grid-column:1/-1;">Loading skills…</p>';
+        const res = await fetch('/api/skills');
         const data = await res.json();
         container.innerHTML = '';
-
-        if (!data.skills || !data.skills.length) {
-            container.innerHTML = '<p style="color:var(--text-muted);">No skills registered yet.</p>';
-            return;
-        }
-
-        // Group skills by category
-        const grouped = {};
-        data.skills.forEach(s => {
-            const cat = s.category || 'other';
-            if (!grouped[cat]) grouped[cat] = [];
-            grouped[cat].push(s);
-        });
-
-        // Render each category section
-        const catOrder = ['file_system', 'automation', 'vision', 'web', 'media', 'other'];
-        catOrder.forEach(catKey => {
-            if (!grouped[catKey] || !grouped[catKey].length) return;
-            const skills  = grouped[catKey];
-            const catMeta = SKILL_CATEGORIES[catKey] || SKILL_CATEGORIES.other;
-            const allOn   = skills.every(s => s.enabled);
-            const anyOn   = skills.some(s => s.enabled);
-
-            const section = document.createElement('div');
-            section.className = 'skill-category';
-
-            section.innerHTML = `
-              <div class="skill-cat-header">
-                <span class="skill-cat-icon">${catMeta.icon}</span>
-                <div class="skill-cat-info">
-                  <span class="skill-cat-label" style="color:${catMeta.accent}">${catMeta.label}</span>
-                  <span class="skill-cat-desc">${catMeta.desc}</span>
-                </div>
-                <span class="skill-cat-count" style="border-color:${catMeta.accent}; color:${catMeta.accent};">${skills.length}</span>
-                <button class="skill-cat-toggle-all ${allOn ? 'all-on' : anyOn ? 'some-on' : 'all-off'}"
-                        data-cat="${catKey}" style="--cat-accent:${catMeta.accent}">
-                  ${allOn ? 'Disable All' : 'Enable All'}
-                </button>
-              </div>
-              <div class="skill-cards-row" id="skill-cards-${catKey}"></div>
-            `;
-
-            container.appendChild(section);
-
-            // Toggle-all button
-            section.querySelector('.skill-cat-toggle-all').addEventListener('click', async function() {
-                const enable = !allOn;
-                await Promise.all(skills.map(s =>
-                    fetch('/api/skills/toggle', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name: s.name, enabled: enable }),
-                    })
-                ));
-                loadSkills();
-            });
-
-            // Skill cards
-            const cardsRow = section.querySelector(`#skill-cards-${catKey}`);
-            skills.forEach(s => {
-                const meta = SKILL_META[s.name] || { icon: '⚡', label: s.name };
+        if (data.skills && data.skills.length) {
+            data.skills.forEach(s => {
                 const card = document.createElement('div');
-                card.className = `skill-card ${s.enabled ? 'skill-card-on' : 'skill-card-off'}`;
-                card.style.setProperty('--cat-accent', catMeta.accent);
+                card.className = 'card';
                 card.innerHTML = `
-                  <div class="skill-card-top">
-                    <span class="skill-card-icon">${meta.icon}</span>
-                    <label class="stg-toggle skill-card-toggle">
-                      <input type="checkbox" ${s.enabled ? 'checked' : ''}>
-                      <span class="stg-track"><span class="stg-thumb"></span></span>
-                    </label>
-                  </div>
-                  <div class="skill-card-name">${meta.label}</div>
-                  <div class="skill-card-desc">${s.desc}</div>
-                  <div class="skill-card-key">${s.name}</div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                        <h3 style="margin:0;">${s.name}</h3>
+                        <label class="switch">
+                            <input type="checkbox" id="toggle-${s.name}" ${s.enabled ? 'checked' : ''}>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <p>${s.desc}</p>
                 `;
-                cardsRow.appendChild(card);
-
-                card.querySelector('input[type="checkbox"]').addEventListener('change', async e => {
-                    card.classList.toggle('skill-card-on',  e.target.checked);
-                    card.classList.toggle('skill-card-off', !e.target.checked);
+                container.appendChild(card);
+                card.querySelector(`#toggle-${s.name}`).addEventListener('change', async e => {
                     await fetch('/api/skills/toggle', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name: s.name, enabled: e.target.checked }),
+                        body: JSON.stringify({ name: s.name, enabled: e.target.checked })
                     });
                 });
             });
-        });
+        } else {
+            container.innerHTML = '<p style="color:var(--text-muted); grid-column:1/-1;">No skills registered yet.</p>';
+        }
     }
 
     // ── Skill Builder ─────────────────────────────────────
-    let _generatedCode = '';   // holds AI-generated code between steps
-
-    function setStep(step) {
+    window.nextStep = (step) => {
         document.querySelectorAll('.workflow-content').forEach(c => c.classList.remove('active'));
         document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
         document.getElementById(`step-${step}`).classList.add('active');
         document.querySelector(`.step[data-step="${step}"]`).classList.add('active');
-    }
+        if (step === 3) {
+            const name = document.getElementById('skill-name-input').value || '—';
+            const type = document.getElementById('skill-type-input').value;
+            const desc = document.getElementById('skill-desc-input').value || '—';
+            document.getElementById('skill-review-summary').textContent =
+                `Name: ${name}\nType: ${type}\nDescription: ${desc}\n\nSkill will be registered in the modular engine.`;
+        }
+    };
 
-    window.nextStep = (step) => setStep(step);
-
-    // Open / close builder toggle
     const openBuilderBtn = document.getElementById('open-skill-builder');
     if (openBuilderBtn) {
         openBuilderBtn.addEventListener('click', () => {
             const builder = document.getElementById('skill-builder');
-            const isHidden = builder.style.display === 'none' || !builder.style.display;
-            builder.style.display = isHidden ? 'block' : 'none';
-            if (isHidden) {
-                setStep(1);
-                _generatedCode = '';
-                document.getElementById('skill-name-input').value = '';
-                document.getElementById('skill-desc-input').value = '';
-                document.getElementById('skill-code-preview').value = '';
-                const res = document.getElementById('skill-install-result');
-                if (res) { res.textContent = ''; res.classList.add('hidden'); }
-            }
+            builder.style.display = builder.style.display === 'none' ? 'block' : 'none';
         });
     }
 
-    async function runAIGenerate() {
-        const name = document.getElementById('skill-name-input').value.trim();
-        const desc = document.getElementById('skill-desc-input').value.trim();
-        if (!name || !desc) { alert('Please fill in both Name and Description first.'); return; }
-
-        setStep(2);
-        const statusEl  = document.getElementById('ai-gen-status');
-        const codeArea  = document.getElementById('skill-code-preview');
-        const regenBtn  = document.getElementById('regen-btn');
-        const nextBtn   = document.getElementById('step2-next-btn');
-
-        statusEl.textContent  = '⚙️ Generating…';
-        statusEl.className    = 'ai-gen-status generating';
-        codeArea.value        = '';
-        if (regenBtn) regenBtn.disabled = true;
-        if (nextBtn)  nextBtn.disabled  = true;
-
-        try {
-            const res  = await fetch('/api/skills/ai-generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, description: desc }),
-            });
-            const data = await res.json();
-
-            if (data.status === 'success') {
-                _generatedCode   = data.code;
-                codeArea.value   = data.code;
-                statusEl.textContent = '✅ Code ready — review or edit below';
-                statusEl.className   = 'ai-gen-status done';
-            } else {
-                statusEl.textContent = `❌ ${data.message}`;
-                statusEl.className   = 'ai-gen-status error';
-            }
-        } catch (err) {
-            statusEl.textContent = `❌ Request failed: ${err.message}`;
-            statusEl.className   = 'ai-gen-status error';
-        } finally {
-            if (regenBtn) regenBtn.disabled = false;
-            if (nextBtn)  nextBtn.disabled  = false;
-        }
-    }
-
-    // Step 1 → AI Generate
-    const step1NextBtn = document.getElementById('step1-next-btn');
-    if (step1NextBtn) step1NextBtn.addEventListener('click', runAIGenerate);
-
-    // Regenerate button
-    const regenBtn = document.getElementById('regen-btn');
-    if (regenBtn) regenBtn.addEventListener('click', runAIGenerate);
-
-    // Step 2 → Review (step 3)
-    const step2NextBtn = document.getElementById('step2-next-btn');
-    if (step2NextBtn) {
-        step2NextBtn.addEventListener('click', () => {
-            _generatedCode = document.getElementById('skill-code-preview').value.trim();
-            if (!_generatedCode) { alert('No code to review — generate it first.'); return; }
-            const name = document.getElementById('skill-name-input').value.trim();
-            const desc = document.getElementById('skill-desc-input').value.trim();
-            document.getElementById('skill-review-summary').textContent =
-                `Name        : ${name}\nDescription : ${desc}\n\nFile will be saved to:\n  src/skills/custom/${name.toLowerCase().replace(/[^a-z0-9]/g,'_')}.py\n\nCode preview (first 300 chars):\n${_generatedCode.slice(0, 300)}${_generatedCode.length > 300 ? '…' : ''}`;
-            const res = document.getElementById('skill-install-result');
-            if (res) { res.textContent = ''; res.classList.add('hidden'); }
-            setStep(3);
-        });
-    }
-
-    // Install button
     const finalCreateBtn = document.getElementById('final-create-skill-btn');
     if (finalCreateBtn) {
         finalCreateBtn.addEventListener('click', async () => {
-            const name = document.getElementById('skill-name-input').value.trim();
-            const desc = document.getElementById('skill-desc-input').value.trim();
-            const code = _generatedCode || document.getElementById('skill-code-preview').value.trim();
-            const resultEl = document.getElementById('skill-install-result');
-
-            if (!code) { alert('No code to install.'); return; }
-
-            finalCreateBtn.disabled    = true;
-            finalCreateBtn.textContent = '⏳ Installing…';
-            if (resultEl) { resultEl.textContent = ''; resultEl.classList.add('hidden'); }
-
-            try {
-                const res  = await fetch('/api/skills/create', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, description: desc, code }),
-                });
-                const data = await res.json();
-
-                if (resultEl) {
-                    resultEl.textContent = data.message;
-                    resultEl.className   = `skill-install-result ${data.status === 'success' ? 'install-ok' : 'install-err'}`;
-                }
-
-                if (data.status === 'success') {
-                    setTimeout(() => {
-                        document.getElementById('skill-builder').style.display = 'none';
-                        loadSkills();
-                    }, 1800);
-                }
-            } catch (err) {
-                if (resultEl) {
-                    resultEl.textContent = `❌ Network error: ${err.message}`;
-                    resultEl.className   = 'skill-install-result install-err';
-                }
-            } finally {
-                finalCreateBtn.disabled    = false;
-                finalCreateBtn.textContent = '🚀 Install Skill';
-            }
+            const name = document.getElementById('skill-name-input').value;
+            const desc = document.getElementById('skill-desc-input').value;
+            const res = await fetch('/api/skills/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, description: desc })
+            });
+            const data = await res.json();
+            alert(data.message);
+            document.getElementById('skill-builder').style.display = 'none';
+            loadSkills();
         });
     }
 
@@ -1247,18 +962,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let micListening  = false;
     let stopVAD       = null;   // call to cancel the VAD loop
 
-    const panelMicBtn = document.getElementById('panel-mic-btn');
-
     function resetMic() {
         micListening = false;
         if (stopVAD) { stopVAD(); stopVAD = null; }
         micBtn.textContent = '🎤';
         micBtn.title = 'Voice input (offline)';
         micBtn.classList.remove('mic-active');
-        if (panelMicBtn) {
-            panelMicBtn.classList.remove('mic-active');
-            panelMicBtn.title = 'Voice input';
-        }
         setBotState('idle');
     }
 
@@ -1298,7 +1007,6 @@ document.addEventListener('DOMContentLoaded', () => {
     async function sendAudioBlob(blob) {
         micBtn.textContent = '⌛';
         micBtn.title = 'Transcribing…';
-        if (panelMicBtn) panelMicBtn.title = 'Transcribing…';
         if (blob.size < 800) { resetMic(); return; }
 
         const form = new FormData();
@@ -1324,16 +1032,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         micBtn.title = 'Voice input (offline)';
-        if (panelMicBtn) panelMicBtn.title = 'Voice input';
 
-        async function toggleMic() {
-            // ── stop if already recording ──────────────────────────────
+        micBtn.addEventListener('click', async () => {
             if (micListening) {
                 if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
                 return;
             }
 
-            // ── request microphone ─────────────────────────────────────
             let stream;
             try {
                 stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1348,10 +1053,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            // ── set up MediaRecorder ───────────────────────────────────
             const mime = ['audio/webm;codecs=opus','audio/ogg;codecs=opus','audio/webm','audio/ogg']
                 .find(t => MediaRecorder.isTypeSupported(t)) || '';
-            audioChunks   = [];
+            audioChunks  = [];
             mediaRecorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
 
             mediaRecorder.ondataavailable = e => { if (e.data?.size > 0) audioChunks.push(e.data); };
@@ -1361,33 +1065,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 sendAudioBlob(blob);
             };
 
-            // ── update both mic buttons ────────────────────────────────
             micListening = true;
             micBtn.textContent = '🔴';
             micBtn.title = 'Recording… click to stop';
             micBtn.classList.add('mic-active');
-            if (panelMicBtn) {
-                panelMicBtn.classList.add('mic-active');
-                panelMicBtn.title = 'Recording… click to stop';
-            }
             setBotState('listening');
             mediaRecorder.start(200);   // collect data every 200 ms
 
-            // ── VAD auto-stop ──────────────────────────────────────────
+            // Start VAD if auto-stop is on
             const s = getSettings();
             if (s.micAutoStop) {
                 stopVAD = startVAD(stream, s.micSilenceMs, s.micSilenceThresh, () => {
                     if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
                 });
             }
-        }
-
-        micBtn.addEventListener('click', toggleMic);
-        if (panelMicBtn) panelMicBtn.addEventListener('click', toggleMic);
-
+        });
     } else {
         micBtn.style.display = 'none';
-        if (panelMicBtn) panelMicBtn.style.display = 'none';
     }
 
     // ── Settings Tab ──────────────────────────────────────

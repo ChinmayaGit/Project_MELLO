@@ -83,6 +83,41 @@ class MemorySystem:
             cursor.execute("SELECT * FROM episodic_memory ORDER BY timestamp DESC LIMIT ?", (limit,))
             return cursor.fetchall()
 
+    def search_episodic_memory(self, query="", limit=50, offset=0):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            if query:
+                cursor.execute(
+                    "SELECT * FROM episodic_memory WHERE description LIKE ? OR event_type LIKE ? "
+                    "ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+                    (f"%{query}%", f"%{query}%", limit, offset)
+                )
+            else:
+                cursor.execute(
+                    "SELECT * FROM episodic_memory ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+                    (limit, offset)
+                )
+            return cursor.fetchall()
+
+    def count_episodic_memory(self):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM episodic_memory")
+            return cursor.fetchone()[0]
+
+    def delete_episodic_memory(self, memory_id):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM episodic_memory WHERE id = ?", (memory_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def clear_episodic_memory(self):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM episodic_memory")
+            conn.commit()
+
 if __name__ == "__main__":
     # Test Memory System
     memory = MemorySystem("test_mello.db")

@@ -42,18 +42,28 @@ class MelloEventHandler(FileSystemEventHandler):
 
 def scan_existing_files(path_to_watch, memory, classifier):
     print(f"Scanning existing files in {path_to_watch}...")
+    handler = MelloEventHandler(memory, classifier)
+    new_count = 0
+    skip_count = 0
     for filename in os.listdir(path_to_watch):
         file_path = os.path.join(path_to_watch, filename)
-        if os.path.isfile(file_path):
-            # Check if we already have this in memory to avoid duplicates
-            # (Simple check: is it in the last 100 events?)
-            # For now, let's just process it.
-            MelloEventHandler(memory, classifier).process_file(file_path)
+        if not os.path.isfile(file_path):
+            continue
+        # Skip files already recorded in memory (avoids re-scanning on every restart)
+        existing = memory.search_episodic_memory(filename, limit=1)
+        if existing:
+            skip_count += 1
+            continue
+        handler.process_file(file_path)
+        new_count += 1
+    print(f"Startup scan complete: {new_count} new file(s), {skip_count} already known.")
 
-def start_watching(path_to_watch, memory, classifier):
-    # Scan existing first
-    scan_existing_files(path_to_watch, memory, classifier)
-    
+def start_watching(path_to_watch, memory, classifier, scan_on_start=True):
+    if scan_on_start:
+        scan_existing_files(path_to_watch, memory, classifier)
+    else:
+        print(f"[Memory] Startup scan skipped (memory disabled).")
+
     event_handler = MelloEventHandler(memory, classifier)
     observer = Observer()
     observer.schedule(event_handler, path_to_watch, recursive=False)
