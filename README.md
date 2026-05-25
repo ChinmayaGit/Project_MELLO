@@ -38,18 +38,15 @@ Mello is not just a chat interface; it's a **contextual automation engine**. It 
 Mello features a modern, dark-themed web interface (FastAPI + Vanilla CSS) accessible at `http://localhost:8000`.
 
 *   **Intelligence Layer:** Real-time streaming chat with **Voice Input (Mic)**.
-    ![Intelligence Layer](pics/Screenshot%20(6).png)
-*   **App Explorer:** Browse and launch all installed Windows applications with one click.
-    ![App Explorer](pics/Screenshot%20(7).png)
-*   **Model Monitor:** View your local Ollama models with live status lights (Green = Active).
-    ![Model Monitor](pics/Screenshot%20(8).png)
-*   **Skill Manager:** Toggle specific "superpowers" ON/OFF and use the **Skill Builder** to create new ones.
-    ![Skill Manager](pics/Screenshot%20(9).png)
-*   **Reports & Logs:** View real-time episodic memory and file classification reports.
-    ![Reports](pics/Screenshot%20(10).png)
-    ![Logs](pics/Screenshot%20(11).png)
-*   **Security Center:** Transparent view of Mello's "Sandbox" (Allowed folders and apps).
-    ![Security Center](pics/Screenshot%20(12).png)
+    ![Intelligence Layer](pics/I%20(1).png)
+    ![App Explorer](pics/I%20(2).png)
+    ![Model Monitor](pics/I%20(3).png)
+    ![Skill Manager](pics/I%20(4).png)
+    ![Reports](pics/I%20(5).png)
+    ![Logs](pics/I%20(6).png)
+    ![Security Center](pics/I%20(7).png)
+    ![Security Center](pics/I%20(8).png)
+    ![Security Center](pics/I%20(9).png)
 
 ---
 
